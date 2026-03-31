@@ -395,3 +395,109 @@ class MessageResponse(BaseModel):
     message: str
     messages_sent: int = 0
     messages_failed: int = 0
+
+# ClickPesa Payment Schemas
+class TenantCreateRequest(BaseModel):
+    """Request to register a new tenant (restaurant)"""
+    name: str
+    mobile_number: str  # Mobile number to receive payments
+    email: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    metadata: Optional[dict] = None
+
+class TenantUpdate(BaseModel):
+    """Update tenant information"""
+    name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    clickpesa_enabled: Optional[bool] = None
+
+class TenantResponse(BaseModel):
+    """Response with tenant information"""
+    id: str
+    name: str
+    mobile_number: str
+    email: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    clickpesa_enabled: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ClickPesaPaymentInitiate(BaseModel):
+    """Request to initiate a ClickPesa payment"""
+    amount: float
+    network: str  # 'airtel', 'tigo', 'halotel'
+    customer_phone: str  # Customer's mobile number
+    tenant_id: str  # Which tenant to pay
+    order_reference: Optional[str] = None
+    metadata: Optional[dict] = None
+
+class ClickPesaTransactionResponse(BaseModel):
+    """Response from payment initiation"""
+    id: str
+    reference: str
+    amount: float
+    admin_fee: float
+    tenant_amount: float
+    network: str
+    customer_phone: str
+    status: str
+    payment_status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ClickPesaWebhookPayload(BaseModel):
+    """ClickPesa webhook payload"""
+    event: str  # 'payment_received', 'payment_failed', 'payout_initiated', etc.
+    transaction_id: str
+    reference: str
+    amount: Optional[float] = None
+    network: Optional[str] = None
+    status: Optional[str] = None
+    timestamp: Optional[str] = None
+    checksum: Optional[str] = None
+
+class AdminFeeLogResponse(BaseModel):
+    """Response for admin fee log"""
+    id: str
+    transaction_id: str
+    amount: float
+    fee_percentage: float
+    status: str
+    payout_id: Optional[str] = None
+    payout_date: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class TenantTransactionHistory(BaseModel):
+    """Transaction history for a specific tenant"""
+    total_revenue: float
+    total_admin_fees: float
+    transactions_count: int
+    pending_count: int
+    successful_count: int
+    failed_count: int
+
+class PaymentStatusResponse(BaseModel):
+    """Response for payment status"""
+    id: str
+    reference: str
+    amount: float
+    status: str
+    payment_status: str
+    payout_status: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

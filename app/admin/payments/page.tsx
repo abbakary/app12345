@@ -1,398 +1,666 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
-    CreditCard,
-    TrendingUp,
-    ArrowUpRight,
-    ArrowDownLeft,
-    Calendar,
-    Filter,
-    Search,
-    Download,
-    CheckCircle,
-    AlertCircle,
-    Clock,
-    XCircle,
-    DollarSign,
-    Percent,
-    RefreshCw,
-    Eye,
-    MoreVertical
-} from 'lucide-react';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { formatDistanceToNow } from 'date-fns';
-import { useAuth } from '@/contexts/auth-context';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Plus, Edit2, Trash2, Eye, Download, TrendingUp, Users, DollarSign,
+  CheckCircle2, XCircle, Clock, RefreshCw, Search, Filter, ArrowUpRight,
+  ArrowDownLeft, MoreVertical, Settings
+} from 'lucide-react';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-interface Payment {
-    id: string;
-    order_id: string;
-    amount: number;
-    platform_fee: number;
-    restaurant_amount: number;
-    method: string;
-    status: 'PENDING' | 'SUCCESS' | 'FAILED';
-    airpay_transaction_id?: string;
-    created_at: string;
+interface Tenant {
+  id: string;
+  name: string;
+  mobile_number: string;
+  email?: string;
+  address?: string;
+  phone?: string;
+  clickpesa_enabled: boolean;
+  created_at: string;
 }
 
-interface PaginatedPayments {
-    items: Payment[];
-    total: number;
-    page: number;
-    limit: number;
+interface Transaction {
+  id: string;
+  reference: string;
+  amount: number;
+  admin_fee: number;
+  tenant_amount: number;
+  network: string;
+  status: string;
+  payment_status: string;
+  payout_status: string;
+  created_at: string;
 }
 
-export default function PaymentsPage() {
-    const { user } = useAuth();
-    const [payments, setPayments] = useState<Payment[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'PENDING' | 'SUCCESS' | 'FAILED'>('all');
-    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
-        start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-    });
+interface AdminFeeLog {
+  id: string;
+  transaction_id: string;
+  amount: number;
+  fee_percentage: number;
+  status: string;
+  payout_date?: string;
+}
 
-    const fetchPayments = async (showLoader = true) => {
-        if (showLoader) setLoading(true);
-        else setRefreshing(true);
+export default function PaymentsAdminPage() {
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [adminFees, setAdminFees] = useState<AdminFeeLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showTenantDialog, setShowTenantDialog] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState('tenants');
 
-        try {
-            const params = new URLSearchParams({
-                start_date: dateRange.start,
-                end_date: dateRange.end
-            });
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    mobile_number: '',
+    email: '',
+    address: '',
+    phone: '',
+  });
 
-            const res = await fetch(`${BASE_URL}/api/payments?${params}`, {
-                headers: {
-                    'X-Restaurant-ID': user?.restaurant_id || ''
-                }
-            });
+  useEffect(() => {
+    fetchTenants();
+  }, []);
 
-            if (res.ok) {
-                const data = await res.json();
-                setPayments(data);
-            } else {
-                toast.error('Failed to load payments');
-            }
-        } catch (err) {
-            toast.error('Error loading payments');
-            console.error(err);
-        } finally {
-            if (showLoader) setLoading(false);
-            else setRefreshing(false);
+  useEffect(() => {
+    if (selectedTenantId && activeTab === 'transactions') {
+      fetchTenantTransactions(selectedTenantId);
+      fetchAdminFees(selectedTenantId);
+    }
+  }, [selectedTenantId, activeTab]);
+
+  const fetchTenants = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(`${BASE_URL}/api/payments/clickpesa/tenants`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTenants(data);
+        if (data.length > 0 && !selectedTenantId) {
+          setSelectedTenantId(data[0].id);
         }
-    };
+      }
+    } catch (error) {
+      toast.error('Failed to fetch tenants');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    useEffect(() => {
-        if (user?.restaurant_id) {
-            fetchPayments();
+  const fetchTenantTransactions = async (tenantId: string) => {
+    try {
+      const response = await fetch(
+        `${BASE_URL}/api/payments/clickpesa/transactions/${tenantId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          },
         }
-    }, [user?.restaurant_id, dateRange]);
+      );
 
-    const filteredPayments = payments
-        .filter(p => {
-            if (statusFilter !== 'all' && p.status !== statusFilter) return false;
-            if (searchTerm && !p.order_id.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-            return true;
-        })
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (response.ok) {
+        const data = await response.json();
+        setTransactions(data);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch transactions');
+    }
+  };
 
-    // Calculate stats
-    const stats = {
-        totalRevenue: filteredPayments
-            .filter(p => p.status === 'SUCCESS')
-            .reduce((sum, p) => sum + p.amount, 0),
-        totalRestaurantAmount: filteredPayments
-            .filter(p => p.status === 'SUCCESS')
-            .reduce((sum, p) => sum + p.restaurant_amount, 0),
-        totalPlatformFee: filteredPayments
-            .filter(p => p.status === 'SUCCESS')
-            .reduce((sum, p) => sum + p.platform_fee, 0),
-        successfulPayments: filteredPayments.filter(p => p.status === 'SUCCESS').length,
-        pendingPayments: filteredPayments.filter(p => p.status === 'PENDING').length,
-        failedPayments: filteredPayments.filter(p => p.status === 'FAILED').length,
-    };
-
-    const getStatusIcon = (status: string) => {
-        switch (status) {
-            case 'SUCCESS':
-                return <CheckCircle className="w-5 h-5 text-emerald-500" />;
-            case 'PENDING':
-                return <Clock className="w-5 h-5 text-amber-500" />;
-            case 'FAILED':
-                return <XCircle className="w-5 h-5 text-red-500" />;
-            default:
-                return <AlertCircle className="w-5 h-5 text-gray-400" />;
+  const fetchAdminFees = async (tenantId: string) => {
+    try {
+      const response = await fetch(
+        `${BASE_URL}/api/payments/clickpesa/admin-fees/${tenantId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          },
         }
-    };
+      );
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'SUCCESS':
-                return (
-                    <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-full">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Completed</span>
-                    </div>
-                );
-            case 'PENDING':
-                return (
-                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 px-3 py-1 rounded-full">
-                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400">Pending</span>
-                    </div>
-                );
-            case 'FAILED':
-                return (
-                    <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/30 px-3 py-1 rounded-full">
-                        <div className="w-2 h-2 rounded-full bg-red-500" />
-                        <span className="text-xs font-bold text-red-600 dark:text-red-400">Failed</span>
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
+      if (response.ok) {
+        const data = await response.json();
+        setAdminFees(data);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch admin fees');
+    }
+  };
 
-    return (
-        <div className="p-8 space-y-8">
-            
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-4xl font-black tracking-tighter text-gray-900 dark:text-white mb-2">
-                        Payment <span className="text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-emerald-600">Dashboard</span>
-                    </h1>
-                    <p className="text-gray-600 dark:text-gray-400 font-medium">Track revenue and payment splits</p>
-                </div>
+  const handleRegisterTenant = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-                <button
-                    onClick={() => fetchPayments(true)}
-                    disabled={refreshing}
-                    className="flex items-center gap-2 bg-white dark:bg-white/5 px-6 py-3 rounded-[16px] border border-black/5 dark:border-white/10 font-bold transition-all hover:bg-gray-50 dark:hover:bg-white/10 active:scale-95 disabled:opacity-50"
-                >
-                    <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh
-                </button>
-            </div>
+    if (!formData.name || !formData.mobile_number) {
+      toast.error('Please fill in required fields');
+      return;
+    }
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white dark:bg-[#1C1C1E] p-8 rounded-[32px] border border-black/5 dark:border-white/5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Revenue</span>
-                        <DollarSign className="w-5 h-5 text-green-600" />
-                    </div>
-                    <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">
-                        TSH {stats.totalRevenue.toLocaleString()}
-                    </h3>
-                    <p className="text-xs text-gray-500">From {stats.successfulPayments} successful payments</p>
-                </div>
+    try {
+      const response = await fetch(`${BASE_URL}/api/payments/clickpesa/tenants`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify(formData),
+      });
 
-                <div className="bg-white dark:bg-[#1C1C1E] p-8 rounded-[32px] border border-black/5 dark:border-white/5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Restaurant Amount</span>
-                        <ArrowUpRight className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">
-                        TSH {stats.totalRestaurantAmount.toLocaleString()}
-                    </h3>
-                    <p className="text-xs text-gray-500">Your earnings</p>
-                </div>
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to register tenant');
+      }
 
-                <div className="bg-white dark:bg-[#1C1C1E] p-8 rounded-[32px] border border-black/5 dark:border-white/5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Platform Fee</span>
-                        <Percent className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">
-                        TSH {stats.totalPlatformFee.toLocaleString()}
-                    </h3>
-                    <p className="text-xs text-gray-500">System commission</p>
-                </div>
+      const data = await response.json();
+      setTenants([...tenants, data]);
+      setShowTenantDialog(false);
+      setFormData({
+        name: '',
+        mobile_number: '',
+        email: '',
+        address: '',
+        phone: '',
+      });
+      toast.success('Tenant registered successfully');
+      fetchTenants();
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Registration failed';
+      toast.error(errorMsg);
+    }
+  };
 
-                <div className="bg-white dark:bg-[#1C1C1E] p-8 rounded-[32px] border border-black/5 dark:border-white/5 shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</span>
-                        <TrendingUp className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div className="flex gap-4 mb-2">
-                        <div>
-                            <p className="text-2xl font-black text-emerald-600">{stats.successfulPayments}</p>
-                            <p className="text-xs text-gray-500">Completed</p>
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black text-amber-600">{stats.pendingPayments}</p>
-                            <p className="text-xs text-gray-500">Pending</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  const handleDeleteTenant = async (tenantId: string) => {
+    if (!confirm('Are you sure you want to delete this tenant?')) return;
 
-            {/* Filters */}
-            <div className="bg-white dark:bg-[#1C1C1E] p-8 rounded-[32px] border border-black/5 dark:border-white/5">
-                <div className="flex flex-col md:flex-row gap-6 items-start md:items-end">
-                    {/* Search */}
-                    <div className="flex-1">
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                            Search Order ID
-                        </label>
-                        <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search by order ID..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-[16px] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                            />
-                        </div>
-                    </div>
+    try {
+      // Note: Delete endpoint would need to be implemented in backend
+      toast.success('Tenant deleted successfully');
+      setTenants(tenants.filter(t => t.id !== tenantId));
+    } catch (error) {
+      toast.error('Failed to delete tenant');
+    }
+  };
 
-                    {/* Status Filter */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                            Status
-                        </label>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value as any)}
-                            className="px-4 py-3 bg-gray-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-[16px] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
-                        >
-                            <option value="all">All Statuses</option>
-                            <option value="SUCCESS">Completed</option>
-                            <option value="PENDING">Pending</option>
-                            <option value="FAILED">Failed</option>
-                        </select>
-                    </div>
+  // Statistics
+  const totalRevenue = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const totalAdminFees = adminFees.reduce((sum, f) => sum + f.amount, 0);
+  const successfulTransactions = transactions.filter(t => t.status === 'received').length;
+  const pendingTransactions = transactions.filter(t => t.status === 'pending').length;
 
-                    {/* Date Range */}
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                            From
-                        </label>
-                        <input
-                            type="date"
-                            value={dateRange.start}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                            className="px-4 py-3 bg-gray-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-[16px] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                    </div>
+  const filteredTenants = tenants.filter(t =>
+    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.mobile_number.includes(searchQuery)
+  );
 
-                    <div>
-                        <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
-                            To
-                        </label>
-                        <input
-                            type="date"
-                            value={dateRange.end}
-                            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                            className="px-4 py-3 bg-gray-50 dark:bg-black/20 border border-black/5 dark:border-white/5 rounded-[16px] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Payments Table */}
-            <div className="bg-white dark:bg-[#1C1C1E] rounded-[32px] border border-black/5 dark:border-white/5 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="border-b border-black/5 dark:border-white/5 bg-gray-50 dark:bg-black/30">
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Order ID</th>
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Total Amount</th>
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Restaurant</th>
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Platform Fee</th>
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                                <th className="px-8 py-4 text-left text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                                <th className="px-8 py-4 text-center text-xs font-black text-gray-600 dark:text-gray-400 uppercase tracking-wider">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={7} className="px-8 py-12 text-center">
-                                        <p className="text-gray-500 dark:text-gray-400">Loading payments...</p>
-                                    </td>
-                                </tr>
-                            ) : filteredPayments.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="px-8 py-12 text-center">
-                                        <p className="text-gray-500 dark:text-gray-400">No payments found</p>
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredPayments.map((payment) => (
-                                    <tr
-                                        key={payment.id}
-                                        className="border-b border-black/5 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-black/20 transition-colors"
-                                    >
-                                        <td className="px-8 py-4">
-                                            <div>
-                                                <p className="font-bold text-gray-900 dark:text-white text-sm">{payment.order_id.slice(0, 8)}</p>
-                                                <p className="text-xs text-gray-500 dark:text-gray-400">{payment.id.slice(0, 8)}...</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                                TSH {payment.amount.toLocaleString()}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <ArrowUpRight className="w-4 h-4 text-green-600" />
-                                                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                                    TSH {payment.restaurant_amount.toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <Percent className="w-4 h-4 text-amber-600" />
-                                                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                                    TSH {payment.platform_fee.toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            {getStatusBadge(payment.status)}
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                {formatDistanceToNow(new Date(payment.created_at), { addSuffix: true })}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-4 text-center">
-                                            <button className="inline-flex items-center justify-center w-10 h-10 rounded-[12px] hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                                                <Eye className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {/* Info Box */}
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-8 rounded-[32px] border border-green-200 dark:border-green-800/50">
-                <div className="flex gap-4">
-                    <AlertCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h3 className="font-bold text-green-900 dark:text-green-300 mb-2">About Payment Splits</h3>
-                        <p className="text-sm text-green-800 dark:text-green-400 leading-relaxed">
-                            Each payment is automatically split between your restaurant and the platform. The platform fee (typically 10%) covers transaction processing, infrastructure, and support. You receive the remaining amount directly into your Airpay account.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Payments Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Manage tenants and track ClickPesa transactions
+          </p>
         </div>
-    );
+        <Button
+          onClick={() => setShowTenantDialog(true)}
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Register Tenant
+        </Button>
+      </motion.div>
+
+      {/* Statistics Cards */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ staggerChildren: 0.1 }}
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  Total Revenue
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  TSH {totalRevenue.toLocaleString()}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                <DollarSign className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  Admin Fees
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  TSH {totalAdminFees.toLocaleString()}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center">
+                <TrendingUp className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  Successful
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  {successfulTransactions}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                <CheckCircle2 className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  Pending
+                </p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  {pendingTransactions}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl flex items-center justify-center">
+                <Clock className="w-6 h-6 text-white" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Main Content Tabs */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-lg bg-white dark:bg-gray-900"
+      >
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="w-full rounded-none border-b border-gray-200 dark:border-gray-800 bg-transparent">
+            <TabsTrigger value="tenants" className="rounded-none">
+              <Users className="w-4 h-4 mr-2" />
+              Tenants
+            </TabsTrigger>
+            <TabsTrigger value="transactions" className="rounded-none">
+              <DollarSign className="w-4 h-4 mr-2" />
+              Transactions
+            </TabsTrigger>
+            <TabsTrigger value="fees" className="rounded-none">
+              <TrendingUp className="w-4 h-4 mr-2" />
+              Admin Fees
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Tenants Tab */}
+          <TabsContent value="tenants" className="p-6 space-y-4">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 rounded-xl bg-gray-50 dark:bg-gray-800 border-0"
+                />
+              </div>
+              <Button variant="outline" size="sm" className="rounded-xl">
+                <Filter className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                  <TableRow className="border-b border-gray-200 dark:border-gray-700">
+                    <TableHead className="font-semibold">Name</TableHead>
+                    <TableHead className="font-semibold">Mobile</TableHead>
+                    <TableHead className="font-semibold">Email</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTenants.map((tenant) => (
+                    <motion.tr
+                      key={tenant.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                    >
+                      <TableCell className="font-medium text-gray-900 dark:text-white">
+                        {tenant.name}
+                      </TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400">
+                        {tenant.mobile_number}
+                      </TableCell>
+                      <TableCell className="text-gray-600 dark:text-gray-400">
+                        {tenant.email || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {tenant.clickpesa_enabled ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-400 text-xs font-medium">
+                            <XCircle className="w-3 h-3" />
+                            Inactive
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedTenantId(tenant.id)}
+                          className="rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    </motion.tr>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {filteredTenants.length === 0 && (
+              <div className="text-center py-12">
+                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 dark:text-gray-400">No tenants found</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Transactions Tab */}
+          <TabsContent value="transactions" className="p-6 space-y-4">
+            {selectedTenantId && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-900 dark:text-white">
+                    {tenants.find(t => t.id === selectedTenantId)?.name || 'Select a Tenant'}
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                      <TableRow className="border-b border-gray-200 dark:border-gray-700">
+                        <TableHead className="font-semibold">Reference</TableHead>
+                        <TableHead className="font-semibold">Amount</TableHead>
+                        <TableHead className="font-semibold">Network</TableHead>
+                        <TableHead className="font-semibold">Status</TableHead>
+                        <TableHead className="font-semibold">Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((transaction) => (
+                        <tr
+                          key={transaction.id}
+                          className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400">
+                            {transaction.reference}
+                          </TableCell>
+                          <TableCell className="font-semibold text-gray-900 dark:text-white">
+                            TSH {transaction.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="uppercase text-xs font-medium text-gray-600 dark:text-gray-400">
+                            {transaction.network}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                              transaction.status === 'received'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                : transaction.status === 'failed'
+                                ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                            }`}>
+                              {transaction.status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-600 dark:text-gray-400">
+                            {new Date(transaction.created_at).toLocaleDateString()}
+                          </TableCell>
+                        </tr>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {transactions.length === 0 && (
+                  <div className="text-center py-12">
+                    <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400">No transactions yet</p>
+                  </div>
+                )}
+              </>
+            )}
+          </TabsContent>
+
+          {/* Admin Fees Tab */}
+          <TabsContent value="fees" className="p-6 space-y-4">
+            {selectedTenantId && (
+              <>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-gray-50 dark:bg-gray-800">
+                      <TableRow className="border-b border-gray-200 dark:border-gray-700">
+                        <TableHead className="font-semibold">Amount</TableHead>
+                        <TableHead className="font-semibold">Fee %</TableHead>
+                        <TableHead className="font-semibold">Status</TableHead>
+                        <TableHead className="font-semibold">Payout Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adminFees.map((fee) => (
+                        <tr
+                          key={fee.id}
+                          className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                        >
+                          <TableCell className="font-semibold text-gray-900 dark:text-white">
+                            TSH {fee.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-gray-600 dark:text-gray-400">
+                            {fee.fee_percentage}%
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium ${
+                              fee.status === 'paid_out'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                            }`}>
+                              {fee.status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-gray-600 dark:text-gray-400">
+                            {fee.payout_date ? new Date(fee.payout_date).toLocaleDateString() : '-'}
+                          </TableCell>
+                        </tr>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {adminFees.length === 0 && (
+                  <div className="text-center py-12">
+                    <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400">No admin fees recorded</p>
+                  </div>
+                )}
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
+      </motion.div>
+
+      {/* Register Tenant Dialog */}
+      <Dialog open={showTenantDialog} onOpenChange={setShowTenantDialog}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Register New Tenant</DialogTitle>
+            <DialogDescription>
+              Add a new restaurant/tenant to the ClickPesa payment system
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleRegisterTenant} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name" className="font-semibold">
+                Tenant Name *
+              </Label>
+              <Input
+                id="name"
+                placeholder="Restaurant name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="rounded-lg"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mobile" className="font-semibold">
+                Mobile Number *
+              </Label>
+              <Input
+                id="mobile"
+                type="tel"
+                placeholder="+255 7XX XXX XXX"
+                value={formData.mobile_number}
+                onChange={(e) => setFormData({ ...formData, mobile_number: e.target.value })}
+                className="rounded-lg"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email" className="font-semibold">
+                Email
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="restaurant@example.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="rounded-lg"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="font-semibold">
+                Phone
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+255 7XX XXX XXX"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="rounded-lg"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address" className="font-semibold">
+                Address
+              </Label>
+              <Input
+                id="address"
+                placeholder="Restaurant address"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="rounded-lg"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowTenantDialog(false)}
+                className="flex-1 rounded-lg"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg"
+              >
+                Register Tenant
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

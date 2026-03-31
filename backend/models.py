@@ -14,6 +14,9 @@ class Restaurant(Base):
     payment_status = Column(String(20), default="pending")  # 'pending', 'active', 'failed'
     customer_portal_url = Column(String(255), nullable=True, unique=True, index=True)  # e.g., 'restaurant-name-unique'
     logo_url = Column(String(500), nullable=True)  # URL to restaurant logo
+    # ClickPesa integration fields
+    clickpesa_mobile_number = Column(String(20), nullable=True)  # Tenant mobile number to receive payments
+    clickpesa_enabled = Column(Boolean, default=False)  # Whether ClickPesa is enabled for this tenant
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class User(Base):
@@ -163,3 +166,45 @@ class Message(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     sent_at = Column(DateTime, nullable=True)
     error_message = Column(String(500), nullable=True)
+
+class ClickPesaTransaction(Base):
+    """
+    ClickPesa transaction model for mobile money payments
+    Tracks payment requests to ClickPesa, webhooks, and payout status
+    """
+    __tablename__ = "clickpesa_transactions"
+    id = Column(String(36), primary_key=True, index=True)
+    tenant_id = Column(String(36), ForeignKey("restaurants.id"))  # Restaurant/Tenant
+    reference = Column(String(100), unique=True, index=True)  # Unique transaction reference
+    amount = Column(Float)  # Full transaction amount
+    admin_fee = Column(Float, default=0.0)  # Platform admin fee
+    tenant_amount = Column(Float, default=0.0)  # Amount to be sent to tenant
+    network = Column(String(20))  # 'airtel', 'tigo', 'halotel'
+    customer_phone = Column(String(20))  # Customer's mobile number
+    tenant_mobile = Column(String(20))  # Tenant's mobile number (recipient)
+    status = Column(String(20), default="pending")  # 'pending', 'processing', 'received', 'failed'
+    payment_status = Column(String(20), default="initiated")  # Payment status from ClickPesa: 'initiated', 'confirmed', 'failed'
+    payout_status = Column(String(20), default="pending")  # 'pending', 'initiated', 'completed', 'failed', 'reversed'
+    clickpesa_transaction_id = Column(String(100), nullable=True, index=True)  # ClickPesa transaction ID
+    webhook_events = Column(JSON, default=list)  # Store webhook events for audit trail
+    metadata = Column(JSON, nullable=True)  # Additional data (order_id, customer_name, etc.)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    webhook_processed_at = Column(DateTime, nullable=True)
+
+class AdminFeeLog(Base):
+    """
+    Log of admin fees collected from transactions
+    Tracks fees separately for payout management
+    """
+    __tablename__ = "admin_fee_logs"
+    id = Column(String(36), primary_key=True, index=True)
+    transaction_id = Column(String(36), ForeignKey("clickpesa_transactions.id"))
+    amount = Column(Float)  # Admin fee amount
+    fee_percentage = Column(Float, default=10.0)  # Percentage used to calculate fee
+    status = Column(String(20), default="collected")  # 'collected', 'pending_payout', 'paid_out'
+    payout_id = Column(String(100), nullable=True)  # Reference to payout transaction
+    payout_date = Column(DateTime, nullable=True)  # When the fee was paid out
+    notes = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
