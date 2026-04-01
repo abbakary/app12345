@@ -121,6 +121,12 @@ export default function PaymentsPage() {
           onOpenChange={(open) => !open && setSelectedOrder(null)}
         />
       )}
+
+      <TenantRegistrationDialog
+        open={showTenantDialog}
+        onOpenChange={setShowTenantDialog}
+        onTenantCreated={() => undefined}
+      />
     </div>
   );
 }

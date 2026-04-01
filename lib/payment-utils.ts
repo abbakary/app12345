@@ -102,24 +102,39 @@ export const getPaymentStatus = async (reference: string) => {
 /**
  * Format phone number for display
  */
+export const normalizeTanzaniaPhoneNumber = (phone: string): string | null => {
+  const cleaned = phone.replace(/[^\d+]/g, '');
+  const digitsOnly = cleaned.replace(/\D/g, '');
+
+  let localNumber = digitsOnly;
+
+  if (cleaned.startsWith('+')) {
+    if (!cleaned.startsWith('+255')) {
+      return null;
+    }
+    localNumber = digitsOnly.slice(3);
+  } else if (digitsOnly.startsWith('255')) {
+    localNumber = digitsOnly.slice(3);
+  } else if (digitsOnly.startsWith('0')) {
+    localNumber = digitsOnly.slice(1);
+  }
+
+  if (!/^[67]\d{8}$/.test(localNumber)) {
+    return null;
+  }
+
+  return `+255${localNumber}`;
+};
+
 export const formatPhoneNumber = (phone: string): string => {
-  const digitsOnly = phone.replace(/\D/g, '');
-  if (digitsOnly.length === 12 && digitsOnly.startsWith('255')) {
-    return `+${digitsOnly}`;
-  }
-  if (digitsOnly.length === 10) {
-    return `+255${digitsOnly.substring(1)}`;
-  }
-  return phone;
+  return normalizeTanzaniaPhoneNumber(phone) || phone;
 };
 
 /**
  * Validate phone number
  */
 export const isValidPhoneNumber = (phone: string): boolean => {
-  const digitsOnly = phone.replace(/\D/g, '');
-  // At least 9 digits for Tanzania numbers
-  return digitsOnly.length >= 9;
+  return normalizeTanzaniaPhoneNumber(phone) !== null;
 };
 
 /**
