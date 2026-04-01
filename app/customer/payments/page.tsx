@@ -133,11 +133,11 @@ export default function PaymentPage() {
         },
         body: JSON.stringify({
           amount: paymentState.amount,
-          network: selectedNetwork,
+          network: selectedNetwork.toLowerCase(),
           customer_phone: customerPhone,
           tenant_id: paymentState.tenant_id,
           order_reference: paymentState.order_reference,
-          metadata: {
+          additional_data: {
             tenant_name: paymentState.tenant_name,
           },
         }),

@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { ReceiptDialog } from '@/components/reception/receipt-dialog';
+import { TenantRegistrationDialog } from '@/components/payments/TenantRegistrationDialog';
 import { Button } from '@/components/ui/button';
-import { Receipt, CreditCard, Banknote, Smartphone, QrCode } from 'lucide-react';
+import { Receipt, CreditCard, Banknote, Smartphone, QrCode, Plus } from 'lucide-react';
 import type { Order } from '@/lib/types';
 
 const methodIcons = {
@@ -21,6 +22,7 @@ export default function PaymentsPage() {
   const { data: payments = [], isLoading: paymentsLoading } = usePayments();
   const { data: orders = [], isLoading: ordersLoading } = useOrders();
   const [selectedOrder, setSelectedOrder] = useState<{order: Order, method: string} | null>(null);
+  const [showTenantDialog, setShowTenantDialog] = useState(false);
 
   if (paymentsLoading || ordersLoading) {
     return (
@@ -32,9 +34,18 @@ export default function PaymentsPage() {
 
   return (
     <div className="p-6 h-full overflow-y-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-foreground">Payments</h1>
-        <p className="text-muted-foreground">View all completed payments</p>
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Payments</h1>
+          <p className="text-muted-foreground">View all completed payments</p>
+        </div>
+        <Button
+          onClick={() => setShowTenantDialog(true)}
+          className="bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 rounded-lg"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Register Tenant for Mobile Money
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
