@@ -191,7 +191,7 @@ class ClickPesaTransaction(Base):
     payout_status = Column(String(20), default="pending")  # 'pending', 'initiated', 'completed', 'failed', 'reversed'
     clickpesa_transaction_id = Column(String(100), nullable=True, index=True)  # ClickPesa transaction ID
     webhook_events = Column(JSON, default=list)  # Store webhook events for audit trail
-    metadata = Column(JSON, nullable=True)  # Additional data (order_id, customer_name, etc.)
+    additional_data = Column(JSON, nullable=True)  # Additional data (order_id, customer_name, etc.)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     webhook_processed_at = Column(DateTime, nullable=True)

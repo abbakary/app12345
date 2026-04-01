@@ -34,10 +34,26 @@ def seed_database(db: Session = Depends(get_db)):
     rest = models.Restaurant(
         id=restaurant_id,
         name="Demo Restaurant",
-        address="123 Example Street"
+        email="admin@demorestaurant.com",
+        phone="555-0001",
+        address="123 Example Street",
+        customer_portal_url="demo-restaurant"
     )
     db.add(rest)
-    
+
+    # Create Second Restaurant
+    restaurant_id_2 = "a8f3c45b-7d2e-4c9a-b1e2-9c7d6e5f3a2b"
+    rest2 = models.Restaurant(
+        id=restaurant_id_2,
+        name="Gourmet Cafe",
+        email="admin@gourmetcafe.com",
+        phone="555-0002",
+        address="456 Cuisine Avenue",
+        customer_portal_url="gourmet-cafe"
+    )
+    db.add(rest2)
+    db.commit()
+
     # 1. Seed Users (attached to Demo Restaurant)
     users = [
         models.User(id="629fc2a5-979f-45ff-a2c2-d7312dfad44b", restaurant_id=restaurant_id, name="Admin User", email="admin@demo.com", role="admin", hashed_password="password", pin="1234"),
@@ -46,7 +62,16 @@ def seed_database(db: Session = Depends(get_db)):
         models.User(id="customer-demo-001", restaurant_id=restaurant_id, name="John Customer", email="customer@demo.com", role="customer", hashed_password="password", phone="555-0123")
     ]
     db.add_all(users)
-        
+
+    # Seed Users for Gourmet Cafe
+    users_cafe = [
+        models.User(id="a1b2c3d4-e5f6-4a5b-8c9d-e0f1a2b3c4d5", restaurant_id=restaurant_id_2, name="Cafe Admin", email="admin@gourmetcafe.com", role="admin", hashed_password="password", pin="5678"),
+        models.User(id="b2c3d4e5-f6a7-4b5c-9d0e-f1a2b3c4d5e6", restaurant_id=restaurant_id_2, name="Cafe Reception", email="reception@gourmetcafe.com", role="reception", hashed_password="password", pin="5555"),
+        models.User(id="c3d4e5f6-a7b8-4c5d-0e1f-a2b3c4d5e6f7", restaurant_id=restaurant_id_2, name="Barista", email="barista@gourmetcafe.com", role="kitchen", hashed_password="password", pin="6666"),
+        models.User(id="customer-cafe-001", restaurant_id=restaurant_id_2, name="Sarah Visitor", email="customer@gourmetcafe.com", role="customer", hashed_password="password", phone="555-0456")
+    ]
+    db.add_all(users_cafe)
+
     # 2. Seed Restaurant Tables (attached to Demo Restaurant)
     tables = [
         models.RestaurantTable(id=str(uuid.uuid4()), restaurant_id=restaurant_id, name="Table 1", capacity=2, status="available", position_row=0, position_col=0, seats=2),
@@ -54,7 +79,15 @@ def seed_database(db: Session = Depends(get_db)):
         models.RestaurantTable(id=str(uuid.uuid4()), restaurant_id=restaurant_id, name="Table 3", capacity=6, status="available", position_row=1, position_col=0, seats=6)
     ]
     db.add_all(tables)
-        
+
+    # Seed Tables for Gourmet Cafe
+    tables_cafe = [
+        models.RestaurantTable(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Window Seat 1", capacity=2, status="available", position_row=0, position_col=0, seats=2),
+        models.RestaurantTable(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Bar Counter", capacity=5, status="available", position_row=0, position_col=1, seats=5),
+        models.RestaurantTable(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Corner Nook", capacity=4, status="available", position_row=1, position_col=0, seats=4)
+    ]
+    db.add_all(tables_cafe)
+
     # 3. Seed Menu Items (attached to Demo Restaurant)
     menu_items = [
         models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id, name="Premium Burger", price=14.99, category="main", description="Angus beef patty with secret sauce", image_url="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&q=80&w=800"),
@@ -63,6 +96,16 @@ def seed_database(db: Session = Depends(get_db)):
         models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id, name="Craft Cola", price=3.99, category="beverage", description="Local craft cola", image_url="https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=800")
     ]
     db.add_all(menu_items)
-        
+
+    # Seed Menu Items for Gourmet Cafe
+    menu_items_cafe = [
+        models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Espresso", price=4.99, category="beverage", description="Single shot of premium espresso", image_url="https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&q=80&w=800"),
+        models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Cappuccino", price=5.99, category="beverage", description="Espresso with steamed milk and foam", image_url="https://images.unsplash.com/photo-1517668808822-9ebb02ae2a0e?auto=format&fit=crop&q=80&w=800"),
+        models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Croissant", price=4.49, category="pastry", description="Buttery French pastry", image_url="https://images.unsplash.com/photo-1585080876282-87c1e92e4a8d?auto=format&fit=crop&q=80&w=800"),
+        models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Blueberry Muffin", price=5.49, category="pastry", description="Fresh blueberry muffin", image_url="https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?auto=format&fit=crop&q=80&w=800"),
+        models.MenuItem(id=str(uuid.uuid4()), restaurant_id=restaurant_id_2, name="Greek Salad", price=9.99, category="main", description="Fresh feta, olives, and tomatoes", image_url="https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&q=80&w=800")
+    ]
+    db.add_all(menu_items_cafe)
+
     db.commit()
-    return {"message": "Database seeded successfully with Users, Tables, and Menu Items"}
+    return {"message": "Database seeded successfully with 2 restaurants, Users, Tables, and Menu Items"}

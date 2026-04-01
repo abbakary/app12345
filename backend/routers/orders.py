@@ -15,6 +15,20 @@ import models, schemas
 
 from auth_utils import verify_restaurant
 
+def create_notification(db: Session, restaurant_id: str, title: str, message: str, notification_type: str):
+    """Helper function to create a notification"""
+    notification = models.Notification(
+        id=str(uuid.uuid4()),
+        restaurant_id=restaurant_id,
+        title=title,
+        message=message,
+        type=notification_type,
+        read=False
+    )
+    db.add(notification)
+    db.commit()
+    return notification
+
 router = APIRouter(prefix="/api/orders", tags=["Orders"])
 
 @router.get("", response_model=List[schemas.Order])
@@ -123,6 +137,24 @@ async def create_order(
 
         db.commit()
         print(f"Order {db_order.id} committed successfully with coupon {db_order.coupon_code}")
+
+        # Create notification for new order
+        if is_portal_order:
+            create_notification(
+                db,
+                restaurant_id,
+                title="New Customer Order",
+                message=f"New order from customer: {order_data.customer_phone or 'Unknown'} for {order_data.total}",
+                notification_type="new_order"
+            )
+        else:
+            create_notification(
+                db,
+                restaurant_id,
+                title="New Order",
+                message=f"New order placed for table {order_data.table_name} - Total: {order_data.total}",
+                notification_type="new_order"
+            )
     except Exception as e:
         db.rollback()
         print(f"Error creating order: {str(e)}")
@@ -146,13 +178,57 @@ async def update_order_status(order_id: str, updates: schemas.OrderUpdate, db: S
     db_order = db.query(models.Order).filter(models.Order.restaurant_id == restaurant_id).filter(models.Order.id == order_id).first()
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
-        
+
+    old_status = db_order.status
     if updates.status:
         db_order.status = updates.status
         if updates.status == "preparing":
             db_order.prepared_at = datetime.utcnow()
-            
+
     db.commit()
+
+    # Create notification based on status change
+    if updates.status and updates.status != old_status:
+        if updates.status == "preparing":
+            create_notification(
+                db,
+                restaurant_id,
+                title="Order Started",
+                message=f"Order {order_id[:8]} is now being prepared",
+                notification_type="order_started"
+            )
+        elif updates.status == "ready":
+            create_notification(
+                db,
+                restaurant_id,
+                title="Order Ready",
+                message=f"Order {order_id[:8]} is ready for pickup/serving",
+                notification_type="order_ready"
+            )
+        elif updates.status == "served":
+            create_notification(
+                db,
+                restaurant_id,
+                title="Order Served",
+                message=f"Order {order_id[:8]} has been served",
+                notification_type="order_served"
+            )
+        elif updates.status == "paid":
+            create_notification(
+                db,
+                restaurant_id,
+                title="Order Paid",
+                message=f"Order {order_id[:8]} payment has been received",
+                notification_type="order_paid"
+            )
+        elif updates.status == "cancelled":
+            create_notification(
+                db,
+                restaurant_id,
+                title="Order Cancelled",
+                message=f"Order {order_id[:8]} has been cancelled",
+                notification_type="order_cancelled"
+            )
 
     # Refresh with eager loading
     refreshed_order = db.query(models.Order)\
@@ -191,6 +267,15 @@ async def update_order_items(order_id: str, updates: schemas.OrderUpdateItems, d
 
     db.commit()
 
+    # Create notification for order items modification
+    create_notification(
+        db,
+        restaurant_id,
+        title="Order Items Modified",
+        message=f"Order {order_id[:8]} items have been updated",
+        notification_type="order_modified"
+    )
+
     # Refresh with eager loading
     refreshed_order = db.query(models.Order)\
         .options(joinedload(models.Order.items).joinedload(models.OrderItem.menu_item),
@@ -227,9 +312,23 @@ async def approve_reject_order(
     if approval.approval_status == "approved":
         db_order.approved_at = datetime.utcnow()
         db_order.status = "pending"  # Ready for kitchen
+        create_notification(
+            db,
+            restaurant_id,
+            title="Order Approved",
+            message=f"Order {order_id[:8]} has been approved and sent to kitchen",
+            notification_type="order_approved"
+        )
     elif approval.approval_status == "rejected":
         db_order.rejected_at = datetime.utcnow()
         db_order.status = "cancelled"
+        create_notification(
+            db,
+            restaurant_id,
+            title="Order Rejected",
+            message=f"Order {order_id[:8]} has been rejected. Reason: {approval.approval_notes or 'No reason provided'}",
+            notification_type="order_rejected"
+        )
 
     db_order.updated_at = datetime.utcnow()
     db.commit()

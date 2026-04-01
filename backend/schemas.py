@@ -412,7 +412,7 @@ class TenantCreateRequest(BaseModel):
     email: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
-    metadata: Optional[dict] = None
+    additional_data: Optional[dict] = None
 
 class TenantUpdate(BaseModel):
     """Update tenant information"""
@@ -444,7 +444,7 @@ class ClickPesaPaymentInitiate(BaseModel):
     customer_phone: str  # Customer's mobile number
     tenant_id: str  # Which tenant to pay
     order_reference: Optional[str] = None
-    metadata: Optional[dict] = None
+    additional_data: Optional[dict] = None
 
 class ClickPesaTransactionResponse(BaseModel):
     """Response from payment initiation"""

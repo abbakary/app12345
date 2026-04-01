@@ -164,7 +164,7 @@ async def initiate_payment(
     - customer_phone: Customer's mobile number
     - tenant_id: Tenant (restaurant) ID
     - order_reference: Optional order reference
-    - metadata: Optional additional data
+    - additional_data: Optional additional data
     """
     # Validate tenant exists and is enabled
     tenant = db.query(models.Restaurant).filter(
@@ -216,7 +216,7 @@ async def initiate_payment(
         status="pending",
         payment_status="initiated",
         payout_status="pending",
-        metadata=request.metadata or {},
+        additional_data=request.additional_data or {},
     )
 
     db.add(transaction)

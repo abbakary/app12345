@@ -11,6 +11,20 @@ import models, schemas
 
 from auth_utils import verify_restaurant
 
+def create_notification(db: Session, restaurant_id: str, title: str, message: str, notification_type: str):
+    """Helper function to create a notification"""
+    notification = models.Notification(
+        id=str(uuid.uuid4()),
+        restaurant_id=restaurant_id,
+        title=title,
+        message=message,
+        type=notification_type,
+        read=False
+    )
+    db.add(notification)
+    db.commit()
+    return notification
+
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
 @router.get("", response_model=List[schemas.Payment])
@@ -180,6 +194,16 @@ async def handle_airpay_webhook(
 
         db.commit()
 
+        # Create notification for payment received
+        if order:
+            create_notification(
+                db,
+                order.restaurant_id,
+                title="Payment Received",
+                message=f"Payment of {payment.amount} received for order {order_id[:8]}",
+                notification_type="payment_received"
+            )
+
         # Broadcast update
         await manager.broadcast_update({
             "type": "PAYMENT_COMPLETED",
@@ -266,6 +290,16 @@ async def complete_mock_payment(
     db.refresh(payment)
 
     print(f"Payment completed: {payment_id}, Order status updated to: {order.status if order else 'N/A'}")
+
+    # Create notification for payment received (mock)
+    if order:
+        create_notification(
+            db,
+            order.restaurant_id,
+            title="Payment Received",
+            message=f"Payment of {payment.amount} received for order {payment.order_id[:8]}",
+            notification_type="payment_received"
+        )
 
     # Broadcast update
     await manager.broadcast_update({
