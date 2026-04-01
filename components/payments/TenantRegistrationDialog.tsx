@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatPhoneNumber, isValidPhoneNumber } from '@/lib/payment-utils';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -52,14 +53,13 @@ export function TenantRegistrationDialog({
   });
 
   const validateMobileNumber = (phone: string) => {
-    const cleaned = phone.replace(/[^\d+]/g, '');
-    const digitsOnly = cleaned.replace(/\D/g, '');
+    const digitsOnly = phone.replace(/\D/g, '');
 
     if (digitsOnly.length < 9) {
       return 'Mobile number must have at least 9 digits';
     }
 
-    if (!cleaned.startsWith('+255') && !cleaned.startsWith('255') && !digitsOnly.startsWith('7') && !digitsOnly.startsWith('6')) {
+    if (!isValidPhoneNumber(phone)) {
       return 'Please enter a valid Tanzania mobile number (starting with +255 or 0)';
     }
 
@@ -99,7 +99,10 @@ export function TenantRegistrationDialog({
   const handleRegisterTenant = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (formData.mobile_number !== confirmMobileNumber) {
+    const normalizedMobileNumber = formatPhoneNumber(formData.mobile_number);
+    const normalizedConfirmMobileNumber = formatPhoneNumber(confirmMobileNumber);
+
+    if (normalizedMobileNumber !== normalizedConfirmMobileNumber) {
       toast.error('Mobile numbers do not match. Please re-enter to confirm.');
       return;
     }
@@ -115,7 +118,7 @@ export function TenantRegistrationDialog({
         },
         body: JSON.stringify({
           name: formData.name,
-          mobile_number: formData.mobile_number,
+          mobile_number: normalizedMobileNumber,
           email: formData.email || undefined,
           phone: formData.phone || undefined,
           address: formData.address || undefined,
@@ -172,7 +175,7 @@ export function TenantRegistrationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="rounded-2xl max-w-md">
+      <DialogContent className="rounded-2xl max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl">Register New Tenant</DialogTitle>
           <DialogDescription>
@@ -379,19 +382,19 @@ export function TenantRegistrationDialog({
                   value={confirmMobileNumber}
                   onChange={(e) => setConfirmMobileNumber(e.target.value)}
                   className={`rounded-lg bg-white dark:bg-gray-900 border-2 transition-colors ${
-                    confirmMobileNumber && confirmMobileNumber !== formData.mobile_number
+                    confirmMobileNumber && formatPhoneNumber(confirmMobileNumber) !== formatPhoneNumber(formData.mobile_number)
                       ? 'border-red-500 dark:border-red-500'
-                      : confirmMobileNumber && confirmMobileNumber === formData.mobile_number
+                      : confirmMobileNumber && formatPhoneNumber(confirmMobileNumber) === formatPhoneNumber(formData.mobile_number)
                       ? 'border-green-500 dark:border-green-500'
                       : 'border-red-300 dark:border-red-600'
                   }`}
                 />
-                {confirmMobileNumber && confirmMobileNumber !== formData.mobile_number && (
+                {confirmMobileNumber && formatPhoneNumber(confirmMobileNumber) !== formatPhoneNumber(formData.mobile_number) && (
                   <p className="text-xs text-red-600 dark:text-red-400 mt-2 font-medium">
                     ❌ Mobile numbers do not match
                   </p>
                 )}
-                {confirmMobileNumber === formData.mobile_number && confirmMobileNumber !== '' && (
+                {confirmMobileNumber !== '' && formatPhoneNumber(confirmMobileNumber) === formatPhoneNumber(formData.mobile_number) && (
                   <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-medium">
                     ✅ Numbers match - Ready to register
                   </p>
@@ -410,7 +413,7 @@ export function TenantRegistrationDialog({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={confirmMobileNumber !== formData.mobile_number || isSubmitting}
+                  disabled={formatPhoneNumber(confirmMobileNumber) !== formatPhoneNumber(formData.mobile_number) || isSubmitting}
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white rounded-lg font-bold"
                 >
                   {isSubmitting ? 'Registering...' : '✓ Confirm & Register'}
